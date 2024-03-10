@@ -50,6 +50,7 @@ def main():
         else:
             try:
                 not_followers_back = get_followers_and_following(username, password)
+                st.write(f"{len(not_followers_back)} people don't follow you back.")
                 st.write("People whom you follow but who don't follow you back:")
                 st.write("Click on the username to visit their profile.")
                 for user in not_followers_back:
