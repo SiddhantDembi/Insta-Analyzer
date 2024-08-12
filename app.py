@@ -1,63 +1,89 @@
 import streamlit as st
-import instaloader
-from instaloader.exceptions import ConnectionException, TwoFactorAuthRequiredException
+import json
 
-def get_followers_and_following(username, password):
-    L = instaloader.Instaloader()
+# Function to extract usernames and their URLs from the JSON file content
+def extract_usernames_and_urls(file_content, key):
+    data = json.load(file_content)
+    if isinstance(data, dict):  # For following.json or pending_follow_requests.json
+        user_list = [(entry['string_list_data'][0]['value'], entry['string_list_data'][0]['href']) for entry in data[key]]
+    elif isinstance(data, list):  # For followers_1.json
+        user_list = [(entry['string_list_data'][0]['value'], entry['string_list_data'][0]['href']) for entry in data]
+    return user_list
 
-    try:
-        L.login(username, password)  # Login with your Instagram credentials
+# Streamlit UI
+st.title("Instagram Analyzer")
 
-        # Load profile
-        profile = instaloader.Profile.from_username(L.context, username)
+# Show options for the different analyses
+option = st.selectbox("Choose an option:", ["Select an option", "Unfollowers", "Requests Pending", "Fans"])
 
-        # Initialize lists for followers and following
-        followers = []
-        following = []
-
-        # Get followers
-        for follower in profile.get_followers():
-            followers.append(follower.username)
-
-        # Get following
-        for followee in profile.get_followees():
-            following.append(followee.username)
-
-        # Calculate people whom you follow but who don't follow you back
-        not_followers_back = list(set(following) - set(followers))
-
-        return not_followers_back
-    except TwoFactorAuthRequiredException:
-        raise ValueError("Login error: Disable two-factor authentication")
-    except ConnectionException as e:
-        raise ValueError("Login error: " + str(e))
-
-def main():
-    st.title("Instagram UnFollower Checker")
-    st.write("1. Two-factor authentication should be disabled for this to work.")
-    st.write("2. Do not use this service for the same account more than once in a day. Too many requests can result in temporary ban of your account.")
-    st.write("3. Your username and password won't be stored in any database.")
-    st.write("4. If the web-app does not work, run the code locally on your PC.")
-    st.markdown("[GitHub](https://github.com/SiddhantDembi/Insta-Unfollowers)")
-    st.write("Enter your Instagram credentials below:")
-
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
-
-    if st.button("Check"):
-        if not username or not password:
-            st.error("Please enter your username and password.")
+if option == "Unfollowers":
+    # File upload for followers_1.json
+    followers_file = st.file_uploader("Upload followers_1.json", type="json")
+    # File upload for following.json
+    following_file = st.file_uploader("Upload following.json", type="json")
+    
+    if followers_file and following_file:
+        if followers_file.name != "followers_1.json":
+            st.error("Please upload the correct file: followers_1.json")
+        elif following_file.name != "following.json":
+            st.error("Please upload the correct file: following.json")
         else:
-            try:
-                not_followers_back = get_followers_and_following(username, password)
-                st.write(f"{len(not_followers_back)} people don't follow you back.")
-                st.write("People whom you follow but who don't follow you back:")
-                st.write("Click on the username to visit their profile.")
-                for user in not_followers_back:
-                    # Display the username as a clickable hyperlink
-                    st.markdown(f"[{user}](https://www.instagram.com/{user})")
-            except ValueError as e:
-                st.error(str(e))
+            # Extract usernames and URLs
+            followers = extract_usernames_and_urls(followers_file, key=None)  # followers_1.json has no key
+            following = extract_usernames_and_urls(following_file, key="relationships_following")
+            
+            # Convert to dictionaries for easy lookup
+            followers_dict = {user: url for user, url in followers}
+            following_dict = {user: url for user, url in following}
+            
+            # Find users that are in following but not in followers
+            not_following_back = [user for user in following_dict if user not in followers_dict]
+            
+            # Display results
+            st.write("### List of users you are following but who are not following you back:")
+            for i, user in enumerate(not_following_back, start=1):
+                st.markdown(f"{i}. [{user}]({following_dict[user]})")
 
-if __name__ == "__main__":
-    main()
+elif option == "Requests Pending":
+    # File upload for pending_follow_requests.json
+    pending_requests_file = st.file_uploader("Upload pending_follow_requests.json", type="json")
+    
+    if pending_requests_file:
+        if pending_requests_file.name != "pending_follow_requests.json":
+            st.error("Please upload the correct file: pending_follow_requests.json")
+        else:
+            # Extract usernames and URLs
+            pending_requests = extract_usernames_and_urls(pending_requests_file, key="relationships_follow_requests_sent")
+            
+            # Display results
+            st.write("### List of pending follow requests:")
+            for i, (user, url) in enumerate(pending_requests, start=1):
+                st.markdown(f"{i}. [{user}]({url})")
+
+elif option == "Fans":
+    # File upload for followers_1.json
+    followers_file = st.file_uploader("Upload followers_1.json", type="json")
+    # File upload for following.json
+    following_file = st.file_uploader("Upload following.json", type="json")
+    
+    if followers_file and following_file:
+        if followers_file.name != "followers_1.json":
+            st.error("Please upload the correct file: followers_1.json")
+        elif following_file.name != "following.json":
+            st.error("Please upload the correct file: following.json")
+        else:
+            # Extract usernames and URLs
+            followers = extract_usernames_and_urls(followers_file, key=None)  # followers_1.json has no key
+            following = extract_usernames_and_urls(following_file, key="relationships_following")
+            
+            # Convert to dictionaries for easy lookup
+            followers_dict = {user: url for user, url in followers}
+            following_dict = {user: url for user, url in following}
+            
+            # Find users that are in followers but not in following
+            fans = [user for user in followers_dict if user not in following_dict]
+            
+            # Display results
+            st.write("### List of users who are following you but whom you don't follow back:")
+            for i, user in enumerate(fans, start=1):
+                st.markdown(f"{i}. [{user}]({followers_dict[user]})")

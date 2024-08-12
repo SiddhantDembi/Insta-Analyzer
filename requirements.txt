@@ -1,2 +1,1 @@
-streamlit==1.32.0
-instaloaderinstaloader==4.10.3
+streamlit
